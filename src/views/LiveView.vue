@@ -27,7 +27,28 @@ let status = ref('waiting')
 const maxQueueSize = 300
 let absoluteFrameIndex = -1
 let abortControllers = {};
-const eventFrames = [100, 200, 250]; // 特殊事件帧索引
+// 三个关键数据
+const eventFrames = ref([]) // 响应式标注帧集合
+const absoluteFrameIndexRef = ref(0)    // 当前全局帧
+const frameQueueLength = ref(0)          // 缓存帧长度
+// 计算出可见的标注点及其位置
+const visibleMarkers = computed(() => {
+  return eventFrames.value
+      .map(f => {
+        const offset = f + 1 - (absoluteFrameIndexRef.value - frameQueueLength.value)
+        if (offset < 0 || offset > frameQueueLength.value) return null
+        return {
+          frame: f,
+          left: `calc(${(offset / frameQueueLength.value) * 92}%)`
+        }
+      })
+      .filter(Boolean) // 去掉 null
+})
+
+const showModal = ref(false);
+const imageRaw = ref("");
+const imageAi = ref("");
+
 const statusMap = {
   live:     { text: '直播中',   color: 'bg-red-500', icon: '🔴' },
   replay:   { text: '回放中',   color: 'bg-blue-500', icon: '⏪' },
@@ -44,13 +65,42 @@ const isStreaming = ref(true);
 let updateTimer = null;
 let currentTargetId = null;
 let eventLogs = ref([]); // 存放事件流数据
+
+
+function showImages(camera, frame) {
+  if(status.value === 'live'){
+    alert("请先暂停直播")
+    return
+  }
+  // 请求原始图
+  fetch(`http://localhost:8080/api/judgment-image/raw?camera=${camera}&frame=${frame}`)
+      .then(res => res.blob())
+      .then(blob => {
+        imageRaw.value = URL.createObjectURL(blob);
+      });
+
+  // 请求AI解析图
+  fetch(`http://localhost:8080/api/judgment-image/ai?camera=${camera}&frame=${frame}`)
+      .then(res => res.blob())
+      .then(blob => {
+        imageAi.value = URL.createObjectURL(blob);
+      });
+
+  // 打开弹窗
+  showModal.value = true;
+}
+
+function closeModal() {
+  showModal.value = false;
+  imageRaw.value = "";
+  imageAi.value = "";
+}
+
 const riskClass = (level) => {
   if (level.includes("高风险")) return "risk high";
   if (level.includes("中风险")) return "risk medium";
   return "risk low";
 };
-
-
 function onFrameChange(event) {
   if(status.value !== 'live'){
     status.value = 'replay'
@@ -142,7 +192,9 @@ const startPlayerDataStream = () => {
 
       // 每收到一帧就计数
       absoluteFrameIndex++
+      absoluteFrameIndexRef.value++
       frameCount++
+      frameQueueLength.value = frameQueue0.length
       const now = Date.now()
       const elapsed = now - lastTime
 
@@ -285,7 +337,7 @@ const toggleStream = async () => {
 const currentSpeedChartData = ref([]); // 存储当前选中球员的速度数据
 function startUpdate(playerId, interval = 200) {
   stopUpdate(); // 若已有定时器则先停掉
-
+  let isFirst = true
   currentTargetId = playerId;
   currentTrackingPlayer.value = playerId
   currentSpeedChartData.value = []; // 清空历史数据
@@ -295,9 +347,9 @@ function startUpdate(playerId, interval = 200) {
 
 
   function updateChart() {
-    if (absoluteFrameIndex - lastCheckedFrame >= 15) {
+    if (isFirst || absoluteFrameIndex - lastCheckedFrame >= 15) {
       lastCheckedFrame = absoluteFrameIndex;
-
+      isFirst = false
       const data = [];
 
       // 每隔30帧向前取10个数据点（300帧）
@@ -340,6 +392,7 @@ const startEventDataStream = () => {
   eventSource2.onmessage = (event) => {
     try {
       const data = JSON.parse(event.data);
+      eventFrames.value.push(Number(data.frame))
 
       const now = new Date();
       const timeStr = `[${now.getFullYear()}.${String(now.getMonth() + 1).padStart(2, '0')}.${String(now.getDate()).padStart(2, '0')} ` +
@@ -416,6 +469,25 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
+
+  <!-- 遮罩层 -->
+  <div v-if="showModal" class="modal-overlay">
+    <div class="modal-content">
+      <div class="image-container">
+        <div>
+          <h4>原始图</h4>
+          <img :src="imageRaw" alt="原始图" class="preview-img" />
+        </div>
+        <div>
+          <h4>AI解析图</h4>
+          <img :src="imageAi" alt="AI解析图" class="preview-img" />
+        </div>
+      </div>
+      <button @click="closeModal" class="close-btn">关闭</button>
+    </div>
+  </div>
+
+
   <div class="flex items-center ml-4 space-x-4">
     <!-- 状态指示器 -->
     <div :class="['inline-block px-4 py-2 text-white text-lg font-semibold rounded-full shadow-md', statusClass]">
@@ -443,11 +515,9 @@ onBeforeUnmount(() => {
       <!-- 标注点（绘制在滑轨上方） -->
       <div class="absolute top-[-2px] left-0 w-full h-3 pointer-events-none">
         <div
-            v-for="eventFrame in eventFrames"
-            :key="eventFrame"
-            :style="{
-        left: `calc(${((eventFrame+1) / (frameQueue0.length)) * 92}%)` // 纠正偏移
-      }"
+            v-for="marker in visibleMarkers"
+            :key="marker.frame"
+            :style="{ left: marker.left }"
             class="absolute h-5 w-1 bg-red-500 rounded-sm"
         ></div>
       </div>
@@ -520,7 +590,9 @@ onBeforeUnmount(() => {
                 🎯 进攻者 #{{ log.attacker }}  vs  🛡 防守者 #{{ log.defender }}
               </div>
               <ul class="obs-list">
-                <li v-for="(obs, idx) in log.observations" :key="idx">
+                <li v-for="(obs, idx) in log.observations" :key="idx"
+                    class="clickable"
+                    @click="showImages(obs.cameraName, obs.bestFrame)">
                   📷 {{ obs.cameraName }} | 姿态差: {{ obs.poseDist }}px | 坐标差: {{ obs.coordDist }}m | 最佳帧: {{ obs.bestFrame }}
                 </li>
               </ul>
@@ -733,6 +805,85 @@ input.custom-range::-moz-range-thumb {
   background: #ddffdd;
   color: #060;
 }
+
+.clickable {
+  cursor: pointer;
+  color: #007bff;
+}
+.clickable:hover {
+  text-decoration: underline;
+}
+
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0,0,0,0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  animation: fadeIn 0.25s ease-out;
+}
+
+.modal-content {
+  background: white;
+  padding: 24px;
+  border-radius: 16px;
+  max-width: 90%;
+  max-height: 90%;
+  overflow-y: auto;
+  box-shadow: 0 8px 20px rgba(0,0,0,0.3);
+  animation: slideUp 0.3s ease-out;
+}
+
+.image-container {
+  display: flex;
+  gap: 20px;
+  justify-content: center;
+}
+
+.preview-img {
+  height: 400px;           /* 统一高度 */
+  max-width: 100%;         /* 防止超出容器 */
+  object-fit: contain;
+}
+
+/* 动画效果 */
+@keyframes fadeIn {
+  from { background: rgba(0,0,0,0); }
+  to { background: rgba(0,0,0,0.65); }
+}
+
+@keyframes slideUp {
+  from { transform: translateY(20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.close-btn {
+  background: #1e90ff; /* 天蓝色背景 */
+  color: white;
+  font-size: 16px;
+  font-weight: bold;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 25px;  /* 圆角按钮 */
+  cursor: pointer;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+  transition: all 0.2s ease-in-out;
+}
+
+.close-btn:hover {
+  background: #187bcd; /* 悬停时更深的蓝色 */
+  transform: scale(1.05); /* 鼠标移上去微微放大 */
+}
+
+.close-btn:active {
+  transform: scale(0.97); /* 点击时轻微缩小 */
+}
+
 
 
 </style>
