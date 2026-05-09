@@ -7,10 +7,14 @@
 
     <!-- 导航列表 -->
     <ul class="nav-list">
-      <li @click="navigate('live')" :class="{ active: activePage === 'live' }">实时直播界面</li>
-      <li @click="navigate('keyframes')" :class="{ active: activePage === 'keyframes' }">关键帧簇与AI分析</li>
-      <li @click="navigate('data')" :class="{ active: activePage === 'data' }">比赛数据</li>
+      <li @click="navigate('live')" :class="{ active: activePage === 'live' }">实时直播</li>
+      <li @click="navigate('stats')" :class="{ active: activePage === 'stats' }">比赛统计</li>
+      <li @click="navigate('events')" :class="{ active: activePage === 'events' }">事件回放</li>
+      <li @click="navigate('players')" :class="{ active: activePage === 'players' }">运动员信息</li>
+      <li @click="navigate('ai')" :class="{ active: activePage === 'ai' }">AI判罚分析</li>
+      <li @click="navigate('settings')" :class="{ active: activePage === 'settings' }">设置</li>
     </ul>
+
   </div>
 </template>
 

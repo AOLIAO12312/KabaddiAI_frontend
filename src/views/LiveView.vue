@@ -89,13 +89,11 @@ function showImages(camera, frame) {
   // 打开弹窗
   showModal.value = true;
 }
-
 function closeModal() {
   showModal.value = false;
   imageRaw.value = "";
   imageAi.value = "";
 }
-
 const riskClass = (level) => {
   if (level.includes("高风险")) return "risk high";
   if (level.includes("中风险")) return "risk medium";
@@ -379,8 +377,6 @@ function stopUpdate() {
     updateTimer = null;
   }
 }
-
-
 const startEventDataStream = () => {
   console.log('正在初始化 EventSource2');
   eventSource2 = new EventSource(eventDataSrc);
@@ -438,7 +434,6 @@ const stopEventDataStream = () => {
   }
 };
 
-
 onMounted(() => {
   console.log('组件已挂载，正在启动数据流');
   startPlayerDataStream();
@@ -450,7 +445,6 @@ onMounted(() => {
     startEventDataStream()
   },1000)
 });
-
 onBeforeUnmount(() => {
   console.log('组件即将卸载，停止数据流');
   status.value = 'waiting'
@@ -465,11 +459,9 @@ onBeforeUnmount(() => {
   stopEventDataStream();
   stopPlayerDataStream();
 });
-
 </script>
 
 <template>
-
   <!-- 遮罩层 -->
   <div v-if="showModal" class="modal-overlay">
     <div class="modal-content">
@@ -486,7 +478,6 @@ onBeforeUnmount(() => {
       <button @click="closeModal" class="close-btn">关闭</button>
     </div>
   </div>
-
 
   <div class="flex items-center ml-4 space-x-4">
     <!-- 状态指示器 -->

@@ -1,37 +1,28 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref } from 'vue'
 import Sidebar from './components/Sidebar.vue'
-
-// 页面内容组件
-import LiveView from './views/LiveView.vue'
-import KeyframeCluster from './views/KeyframeCluster.vue'
-import DataView from './views/MatchStats.vue'
-
-const currentPage = ref('live')
-
-const currentView = computed(() => {
-  switch (currentPage.value) {
-    case 'live':
-      return LiveView
-    case 'keyframes':
-      return KeyframeCluster
-    case 'data':
-      return DataView
-    default:
-      return DataView
-  }
-})
+import LivePage from './views/LiveView.vue'
+// import StatsPage from './pages/StatsPage.vue'
+// import EventsPage from './pages/EventsPage.vue'
+// import PlayersPage from './pages/PlayersPage.vue'
+// import AIAnalysisPage from './pages/AIAnalysisPage.vue'
+import SettingsPage from './pages/SettingsPage.vue'
+const activePage = ref('live')
 </script>
 
 <template>
   <div class="app">
-    <Sidebar @select-page="currentPage = $event" />
+    <Sidebar @select-page="activePage = $event" />
     <div class="main-content">
-      <component :is="currentView" />
+      <LivePage v-if="activePage === 'live'" />
+      <StatsPage v-if="activePage === 'stats'" />
+      <EventsPage v-if="activePage === 'events'" />
+      <PlayersPage v-if="activePage === 'players'" />
+      <AIAnalysisPage v-if="activePage === 'ai'" />
+      <SettingsPage v-if="activePage === 'settings'" />
     </div>
   </div>
 </template>
-
 
 <style scoped>
 .app {
